@@ -1,4 +1,6 @@
-
+from sklearn.metrics import jaccard_similarity_score
+from itertools import combinations
+import numpy as np
 
 '''
 27473 last_name;16976 locale;1 hometown;name;4299 hometown;id;4313 
@@ -6,6 +8,7 @@ birthday;4285 education;school;name;11574 education;school;id;12242 education;ty
  work;employer;id;19031 work;employer;name;18285 work;employer;id;19032 location;name;119 location;id;119
 '''
 def load_users_features(fname):
+    features_list = [i[:-1] for i in open('featureList.txt').readlines()]
     features_data = []
     with open(fname) as f:
         for row in f.readlines():
@@ -15,8 +18,32 @@ def load_users_features(fname):
             for r in row:
                 k, v = r.rsplit(';', 1)
                 data[k] = v
+            for i in features_list:
+                if i not in data:
+                    data[i] = 0
+            data = dict(sorted(data.items(), key=lambda x: x[1]))
             features_data.append(data)
-    return features_data
+    return np.array(features_data)
+
+
+def compute_nbrs(user_k, user_j):
+    return jaccard_similarity_score(user_k.values(), user_j.values())
 
 users = load_users_features('features.txt')
-print users[100:103]
+
+data = np.array([[ (i, j, compute_nbrs(i, j)) for j in users ] for i in users])
+print data[0]
+
+exit()
+
+curr = 0
+user_matrix = dict([(i['id'], {}) for i in users])
+for user_k, user_j in combinations(users, 2):
+    score = compute_nbrs(user_k, user_j)
+    user_matrix[user_k['id']][user_j['id']] = score
+    user_matrix[user_j['id']][user_k['id']] = score
+    curr += 1
+    if curr % 10000 == 0:
+        print curr
+
+print user_matrix[1]
