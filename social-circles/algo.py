@@ -42,11 +42,17 @@ def common_features_egonet():
                     com_cntr.update(com_features.keys())
                 com_most = [i[0] for i in com_cntr.most_common(4)]
                 conditions = { k:v for k, v in user_features.iteritems() if k in com_most}
-                conditions.update({"_id": {"$nin": friends + [user_id, ]}})
-                new_friends = db.features.find(conditions)
-                new_friends_ids = [i['_id'] for i in new_friends]
+                #conditions.update({"_id": {"$nin": friends + [user_id, ]}})
+                conditions.update({"_id": {"$in": friends}})
+                cool_friends = db.features.find(conditions)
+                cool_friends_ids = [i['_id'] for i in cool_friends]
                 # write result
-                r = "%s,%s\n" % (user_id, ' '.join(friends + new_friends_ids))
+                #r = "%s,%s\n" % (user_id, ' '.join(friends))
+                #fpw.write(r)
+                if cool_friends_ids and len(cool_friends_ids) > 1:
+                    r = "%s,%s\n" % (user_id, ' '.join(cool_friends_ids))
+                else:
+                    r = "%s,%s\n" % (user_id, ' '.join(friends))
                 print r
                 fpw.write(r)
 
