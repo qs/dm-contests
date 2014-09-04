@@ -28,33 +28,56 @@ def load_features_data():
 
 def common_features_egonet():
     with open('testSet_users_friends.csv') as fp:
-        with open('result.csv', 'w') as fpw:
+        with open('result3.csv', 'w') as fpw:
             fpw.write("UserId,Predicted\n")
             for line in fp.xreadlines():
                 line = line.replace('\r', '').replace('\n', '')
                 user_id, friends = line.split(': ', 1)
                 friends = friends.split(' ')
                 user_features = db.features.find_one({"_id": user_id})
-                friends_features = db.features.find({"_id": {"$in": friends}})
-                com_cntr = Counter()
+                friends_features = list(db.features.find({"_id": {"$in": friends}}))
+                circles = []
+                # getting best friends - most common features
+                better_friends = Counter()
                 for ff in friends_features:
                     com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])) }
-                    com_cntr.update(com_features.keys())
-                com_most = [i[0] for i in com_cntr.most_common(4)]
-                conditions = { k:v for k, v in user_features.iteritems() if k in com_most}
-                #conditions.update({"_id": {"$nin": friends + [user_id, ]}})
-                conditions.update({"_id": {"$in": friends}})
-                cool_friends = db.features.find(conditions)
-                cool_friends_ids = [i['_id'] for i in cool_friends]
-                # write result
-                #r = "%s,%s\n" % (user_id, ' '.join(friends))
-                #fpw.write(r)
-                if cool_friends_ids and len(cool_friends_ids) > 1:
-                    r = "%s,%s\n" % (user_id, ' '.join(cool_friends_ids))
-                else:
-                    r = "%s,%s\n" % (user_id, ' '.join(friends))
-                print r
-                fpw.write(r)
+                    better_friends[ff['_id']] = len(com_features)
+                best_friends = [i[0] for i in better_friends.most_common(4)]
+                #print 'best friends:', best_friends
+                circles.append(best_friends)
+                # collegues
+                collegues = []
+                for ff in friends_features:
+                    com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])and('work' in k)) }
+                    if len(com_features) > 2:
+                        collegues.append(ff['_id'])
+                #print 'collegues:', collegues
+                circles.append(collegues)
+                [friends_features.remove(i) for i in friends_features if i['_id'] in collegues]
+                # school mates
+                school_mates = []
+                for ff in friends_features:
+                    com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])and('education' in k)) }
+                    if len(com_features) > 2:
+                        school_mates.append(ff['_id'])
+                #print 'school_mates:', school_mates
+                circles.append(school_mates)
+                [friends_features.remove(i) for i in friends_features if i['_id'] in school_mates]
+                # local_mates
+                local_mates = []
+                for ff in friends_features:
+                    com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])and('local' in k)) }
+                    if len(com_features) > 2:
+                        local_mates.append(ff['_id'])
+                #print 'local_mates:', local_mates
+                circles.append(local_mates)
+                [friends_features.remove(i) for i in friends_features if i['_id'] in local_mates]
+                
+                row = "%s," % user_id
+                row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
+                print row
+                fpw.write(row)
+
 
 if __name__ == "__main__":
     #load_features_data()
