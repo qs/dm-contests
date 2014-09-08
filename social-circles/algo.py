@@ -7,11 +7,9 @@ client = MongoClient()
 db = client.soccir
 
 def load_features_data():
-    print 'data loading starts ', datetime.now()
-    db.drop_collection('features')  # remove prev data
+    print 'features loading starts ', datetime.now()
     features_list = [i[:-1] for i in open('featureList.txt').readlines()]
     features_vals = set([])
-    col_features = db.features
     with open('features.txt') as fp:
         for line in fp.xreadlines():
             line = line.replace('\r', '').replace('\n', '')
@@ -20,11 +18,22 @@ def load_features_data():
                 features_vals.add(i)
             features = dict([i.rsplit(';', 1) for i in features.split(' ')])
             features['_id'] = features.pop('id')
-            col_features.insert(features)
-    print 'data inserted into collection ', datetime.now()
+            db.users.insert(features)
+    print 'features inserted into collection ', datetime.now()
     for k in features_list:
-        col_features.create_index(k)
-    print 'data index created ', datetime.now()
+        db.users.create_index(k)
+    print 'features index created ', datetime.now()
+
+def load_friends():
+    print 'friends loading starts ', datetime.now()
+    db.drop_collection('friends')  # remove prev data
+    egonets_files = [ f for f in listdir('egonets') if isfile(join('egonets/',f)) ]
+    for f in egonets_files:
+        with open('egonets/%s' % f) as fp:
+            user_id = f.split('.')[0]
+            user = db.users.find_one({"_id": user_id})
+            friends_data = [i.split(':') for i in fp]
+            user.friends
 
 def common_features_egonet():
     with open('testSet_users_friends.csv') as fp:
@@ -34,8 +43,8 @@ def common_features_egonet():
                 line = line.replace('\r', '').replace('\n', '')
                 user_id, friends = line.split(': ', 1)
                 friends = friends.split(' ')
-                user_features = db.features.find_one({"_id": user_id})
-                friends_features = list(db.features.find({"_id": {"$in": friends}}))
+                user_features = db.users.find_one({"_id": user_id})
+                friends_features = list(db.users.find({"_id": {"$in": friends}}))
                 circles = []
                 # getting best friends - most common features
                 better_friends = Counter()
@@ -80,7 +89,9 @@ def common_features_egonet():
 
 
 if __name__ == "__main__":
+    #db.drop_collection('users')
     #load_features_data()
+    #load_friends_data()
     #print 'data loaded'
     common_features_egonet()
     
