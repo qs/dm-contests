@@ -2,6 +2,9 @@ from pymongo import MongoClient
 from datetime import datetime
 from collections import OrderedDict, Counter
 
+from os import listdir
+from os.path import isfile, join
+
 
 client = MongoClient()
 db = client.soccir
@@ -24,16 +27,39 @@ def load_features_data():
         db.users.create_index(k)
     print 'features index created ', datetime.now()
 
-def load_friends():
+def _get_com_key(user_id, friend_id):
+    if int(user_id) > int(friend_id):
+        return "%s_%s" % (friend_id, user_id)
+    else:
+        return "%s_%s" % (user_id, friend_id)
+
+def load_friends_data():
     print 'friends loading starts ', datetime.now()
-    db.drop_collection('friends')  # remove prev data
     egonets_files = [ f for f in listdir('egonets') if isfile(join('egonets/',f)) ]
     for f in egonets_files:
         with open('egonets/%s' % f) as fp:
             user_id = f.split('.')[0]
             user = db.users.find_one({"_id": user_id})
-            friends_data = [i.split(':') for i in fp]
-            user.friends
+            user_friends = []
+            for row in fp:
+                row = row.replace('\n', '')
+                friend_id, com_friends = row.split(': ')
+                com_friends = com_friends.split(' ')
+                user_friends.append(friend_id)
+                k = _get_com_key(user_id, friend_id)
+                try:
+                    db.friends.insert({"_id": k, "friends": com_friends})
+                except:
+                    pass
+            db.users.update({"_id": user_id}, {"$set": {'friends': user_friends}})
+
+def load_circles():
+    ''' loads train circles '''
+
+
+def get_common_features():
+    ''' get most common features for circle selection '''
+
 
 def common_features_egonet():
     with open('testSet_users_friends.csv') as fp:
@@ -89,9 +115,11 @@ def common_features_egonet():
 
 
 if __name__ == "__main__":
-    #db.drop_collection('users')
-    #load_features_data()
-    #load_friends_data()
+    db.drop_collection('users')
+    db.drop_collection('friends')
+
+    load_features_data()
+    load_friends_data()
     #print 'data loaded'
-    common_features_egonet()
+    #common_features_egonet()
     
