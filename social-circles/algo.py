@@ -55,15 +55,29 @@ def load_friends_data():
 
 def load_circles():
     ''' loads train circles '''
-
+    print 'train circles loading starts ', datetime.now()
+    egonets_files = [ f for f in listdir('Training') if isfile(join('Training/',f)) ]
+    for f in egonets_files:
+        with open('Training/%s' % f) as fp:
+            user_id = f.split('.')[0]
+            user = db.users.find_one({"_id": user_id})
 
 def get_common_features():
     ''' get most common features for circle selection '''
 
 
+def _get_circle_on_features(user_features, friends_features, features_list, common_cnt=2):
+    circle = []
+    for ff in friends_features:
+        com_features = { k:v for k, v in user_features.iteritems() 
+                if ( (k in ff) and (user_features[k] == ff[k]) and [True for f in features_list if f in k] ) }
+        if len(com_features) > common_cnt:
+            circle.append(ff['_id'])
+    return circle
+
 def common_features_egonet():
     with open('testSet_users_friends.csv') as fp:
-        with open('result3.csv', 'w') as fpw:
+        with open('result4.csv', 'w') as fpw:
             fpw.write("UserId,Predicted\n")
             for line in fp.xreadlines():
                 line = line.replace('\r', '').replace('\n', '')
@@ -77,36 +91,34 @@ def common_features_egonet():
                 for ff in friends_features:
                     com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])) }
                     better_friends[ff['_id']] = len(com_features)
-                best_friends = [i[0] for i in better_friends.most_common(4)]
+                best_cnt = len(friends_features) / 100 or 3
+                best_friends = [i[0] for i in better_friends.most_common(best_cnt)]
                 #print 'best friends:', best_friends
                 circles.append(best_friends)
+
                 # collegues
-                collegues = []
-                for ff in friends_features:
-                    com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])and('work' in k)) }
-                    if len(com_features) > 2:
-                        collegues.append(ff['_id'])
-                #print 'collegues:', collegues
+                collegues = _get_circle_on_features(user_features, friends_features, ['work', ], 1)
                 circles.append(collegues)
+                print 'collegues', collegues
                 [friends_features.remove(i) for i in friends_features if i['_id'] in collegues]
+
                 # school mates
-                school_mates = []
-                for ff in friends_features:
-                    com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])and('education' in k)) }
-                    if len(com_features) > 2:
-                        school_mates.append(ff['_id'])
-                #print 'school_mates:', school_mates
+                school_mates = _get_circle_on_features(user_features, friends_features, ['education', ], 3)
                 circles.append(school_mates)
+                print 'school_mates', school_mates
                 [friends_features.remove(i) for i in friends_features if i['_id'] in school_mates]
+
                 # local_mates
-                local_mates = []
-                for ff in friends_features:
-                    com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])and('local' in k)) }
-                    if len(com_features) > 2:
-                        local_mates.append(ff['_id'])
-                #print 'local_mates:', local_mates
+                local_mates = _get_circle_on_features(user_features, friends_features, ['loca', ], 3)
                 circles.append(local_mates)
+                print 'local_mates', local_mates
                 [friends_features.remove(i) for i in friends_features if i['_id'] in local_mates]
+
+                # home_mates
+                home_mates = _get_circle_on_features(user_features, friends_features, ['hometown', ], 2)
+                circles.append(home_mates)
+                print 'home_mates', home_mates
+                [friends_features.remove(i) for i in friends_features if i['_id'] in home_mates]
                 
                 row = "%s," % user_id
                 row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
@@ -115,11 +127,11 @@ def common_features_egonet():
 
 
 if __name__ == "__main__":
-    db.drop_collection('users')
-    db.drop_collection('friends')
+    #db.drop_collection('users')
+    #db.drop_collection('friends')
 
-    load_features_data()
-    load_friends_data()
+    #load_features_data()
+    #load_friends_data()
     #print 'data loaded'
-    #common_features_egonet()
+    common_features_egonet()
     
