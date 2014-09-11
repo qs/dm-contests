@@ -76,8 +76,8 @@ def _get_circle_on_features(user_features, friends_features, features_list, comm
     return circle
 
 def common_features_egonet():
-    with open('testSet_users_friends.csv') as fp:
-        with open('result4.csv', 'w') as fpw:
+    with open('testSet_users_friend.csv') as fp:
+        with open('result5.csv', 'w') as fpw:
             fpw.write("UserId,Predicted\n")
             for line in fp.xreadlines():
                 line = line.replace('\r', '').replace('\n', '')
@@ -86,6 +86,7 @@ def common_features_egonet():
                 user_features = db.users.find_one({"_id": user_id})
                 friends_features = list(db.users.find({"_id": {"$in": friends}}))
                 circles = []
+                print 'USER_ID::::', user_id
                 # getting best friends - most common features
                 better_friends = Counter()
                 for ff in friends_features:
@@ -97,16 +98,16 @@ def common_features_egonet():
                 circles.append(best_friends)
 
                 # collegues
-                collegues = _get_circle_on_features(user_features, friends_features, ['work', ], 1)
+                collegues = _get_circle_on_features(user_features, friends_features, ['work', ], 2)
                 circles.append(collegues)
                 print 'collegues', collegues
-                [friends_features.remove(i) for i in friends_features if i['_id'] in collegues]
+                #[friends_features.remove(i) for i in friends_features if i['_id'] in collegues]
 
                 # school mates
-                school_mates = _get_circle_on_features(user_features, friends_features, ['education', ], 3)
+                school_mates = _get_circle_on_features(user_features, friends_features, ['education', ], 4)
                 circles.append(school_mates)
                 print 'school_mates', school_mates
-                [friends_features.remove(i) for i in friends_features if i['_id'] in school_mates]
+                #[friends_features.remove(i) for i in friends_features if i['_id'] in school_mates]
 
                 # local_mates
                 local_mates = _get_circle_on_features(user_features, friends_features, ['loca', ], 3)
@@ -119,11 +120,31 @@ def common_features_egonet():
                 circles.append(home_mates)
                 print 'home_mates', home_mates
                 [friends_features.remove(i) for i in friends_features if i['_id'] in home_mates]
+
+                # other_mates
+                [friends_features.remove(i) for i in friends_features if i['_id'] in collegues]
+                [friends_features.remove(i) for i in friends_features if i['_id'] in school_mates]
+                other_mates = _get_circle_on_features(user_features, friends_features, ['', ], 7)
+                circles.append(other_mates)
+                print 'other_mates', other_mates
+                [friends_features.remove(i) for i in friends_features if i['_id'] in other_mates]
                 
                 row = "%s," % user_id
                 row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
                 print row
                 fpw.write(row)
+
+def get_cluster_circles():
+    with open('egonets/850.egonet') as fp:
+        data = {}
+        for row in fp:
+            row = row.replace('\n', '')
+            user_id, comm = row.split(': ')
+            comm = set(comm.split(' '))
+            data[user_id] = comm
+        clu = cluster.WardAgglomeration(n_clusters=5)
+        clu.fit(np.array(arrs.values()), np.array(arrs.keys()))
+        clu.labels_
 
 
 if __name__ == "__main__":
@@ -134,4 +155,5 @@ if __name__ == "__main__":
     #load_friends_data()
     #print 'data loaded'
     common_features_egonet()
+    #TODO leave best friends, other circlies get from clustering common nbrs
     
