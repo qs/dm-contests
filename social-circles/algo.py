@@ -1,6 +1,8 @@
 from pymongo import MongoClient
 from datetime import datetime
-from collections import OrderedDict, Counter
+from collections import OrderedDict, Counter, defaultdict
+import numpy as np
+from sklearn import cluster
 
 from os import listdir
 from os.path import isfile, join
@@ -146,6 +148,7 @@ def get_cluster_circles():
         clu.fit(np.array(arrs.values()), np.array(arrs.keys()))
         clu.labels_
 
+#===============================================================================
 
 class CircleMaker:
     def __init__(self, fname):
@@ -153,29 +156,61 @@ class CircleMaker:
         self.circles_list = defaultdict(list)
         # default_circles - 'user_id': ['123', '124', ...]
         self.default_circles = defaultdict(list)
-        with open('testSet_users_friend.csv') as fp:
-            fpw.write("UserId,Predicted\n")
+        with open(fname) as fp:
+            fp.readline()
             for line in fp.xreadlines():
                 line = line.replace('\r', '').replace('\n', '')
-                user_id, friends = line.split(', ', 1)
+                user_id, friends = line.split(',', 1)
                 self.default_circles[user_id] = friends.split(' ')
+
+    def get_best_friends_circles(self):
+        pass
 
     def get_cluster_circles(self):
         ''' get data of common friends from egonet and append to self.circles_list'''
+        all_features = open('featureList.txt').read().split('\n')[:-1]
         for user_id in self.default_circles:
+            # loading data of egonet
+            user_features = db.users.find_one({"_id": user_id})
             with open('egonets/%s.egonet' % user_id) as fp:
                 common_list = defaultdict(list)
-            for line in fp.xreadlines():
-                line = line.replace('\r', '').replace('\n', '')
-                friend_id, common_friends = line.split(': ', 1)
-                common_list[friend_id] = common_friends[' ']
-            
+                for line in fp.xreadlines():
+                    line = line.replace('\r', '').replace('\n', '')
+                    friend_id, common_friends = line.split(': ', 1)
+                    common_list[friend_id] = common_friends.split(' ')
+            # preparing for clustring
+            for friend_id in common_list:
+                friend_features = db.users.find_one({"_id": friend_id})
+                features_data = [
+                        (i, 1 if i in friend_features and i in user_features else 0) 
+                        for i in all_features
+                ]
+                data = [(i, 1 if i in common_list[friend_id] else 0) for i in common_list]
+                data += features_data
+                data = np.array([v for k, v in sorted(data, key= lambda x: x[0])])
+                common_list[friend_id] = data
+            # clusreting
+            n_clusters = (len(common_list) / 7) + 1
+            #clu = cluster.WardAgglomeration(n_clusters=n_clusters)
+            clu = cluster.FeatureAgglomeration(affinity='cosine', linkage='complete', n_clusters=n_clusters)
+            clu.fit(np.array(common_list.values()))
+            circles = defaultdict(list)
+            for k, v in izip(common_list, clu.labels_):
+                circles[v].append(k)
+            for circle in circles.values():
+                if len(circle) > 2 and len(circle) < min(len(common_list) / 4, 8):
+                    self.circles_list[user_id].append(circle)
 
     def write_results(self):
-        with open('result5.csv', 'w') as fp:
+        with open('result7.csv', 'w') as fp:
             fp.write("UserId,Predicted\n")
-            for user_id, circles in self.circles_list.itemitems():
+            for user_id in self.default_circles.keys():
                 row = "%s," % user_id
+                print user_id, self.circles_list[user_id]
+                if self.circles_list[user_id]:
+                    circles = self.circles_list[user_id]
+                else:
+                    circles = [self.default_circles[user_id], ]
                 row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
                 print row
                 fp.write(row)
@@ -189,6 +224,7 @@ if __name__ == "__main__":
     #common_features_egonet()
     #TODO leave best friends, other circlies get from clustering common nbrs
 
-    cm = CircleMaker()
+    cm = CircleMaker('sample_submission.csv')
+    cm.get_best_friends_circles()
     cm.get_cluster_circles()
     cm.write_results()
