@@ -62,8 +62,8 @@ def load_circles():
             user_id = f.split('.')[0]
             user = db.users.find_one({"_id": user_id})
 
-def get_common_features():
-    ''' get most common features for circle selection '''
+def load_common_friends():
+    ''' loading data from egonets/ '''
 
 
 def _get_circle_on_features(user_features, friends_features, features_list, common_cnt=2):
@@ -147,13 +147,23 @@ def get_cluster_circles():
         clu.labels_
 
 
+def write_results(circles_list):
+    with open('result5.csv', 'w') as fp:
+        for user_id, circles in circles_list.itemitems():
+            row = "%s," % user_id
+            row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
+            print row
+            fp.write(row)
+
+
 if __name__ == "__main__":
     #db.drop_collection('users')
     #db.drop_collection('friends')
-
     #load_features_data()
     #load_friends_data()
-    #print 'data loaded'
-    common_features_egonet()
+    #common_features_egonet()
     #TODO leave best friends, other circlies get from clustering common nbrs
     
+    circles_list = {} # 'user_id': [['123', '124'], [...], [...]]
+    circles_list = get_cluster_circles()
+    write_results(circles_list)
