@@ -71,12 +71,32 @@ class DataLoader:
 class CircleMaker:
     def __init__(self, users):
         self.circles = defaultdict(list)
-        self.friends = defaultdict(list)
+        self.friends = defaultdict(dict)
         self.users = users
+        self._fill_friends()
 
+    def _fill_friends(self):
+        for user_id in self.users:
+            with open('egonets/%s.egonet' % user_id) as fp:
+                for line in fp.xreadlines():
+                    line = line.replace('\r', '').replace('\n', '')
+                    friend_id, common_friends = line.split(': ', 1)
+                    self.friends[user_id][friend_id] = common_friends.split(' ')
 
     def get_best_friends_circles(self):
-        pass
+        for user_id, friends in self.friends.iteritems():
+            user_features = db.users.find_one({"_id": user_id})
+            friends_features = db.features.find({"_id": {"$in": friends.keys()}})
+            com_cntr = Counter()
+            for ff in friends_features:
+                com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])) }
+                com_cntr.update(com_features.keys())
+            com_most = [i[0] for i in com_cntr.most_common(3)]
+            conditions = { k:v for k, v in user_features.iteritems() if k in com_most}
+            conditions.update({"_id": {"$nin": friends.keys() + [user_id, ]}})
+            best_friends = db.features.find(conditions)
+            self.circles[user_id].append([i['_id'] for i in best_friends])
+            
 
     def get_cluster_circles(self):
         ''' get data of common friends from egonet and append to self.circles_list'''
@@ -119,12 +139,11 @@ class CircleMaker:
             fp.write("UserId,Predicted\n")
             for user_id in self.users:
                 row = "%s," % user_id
-                print user_id, self.circles[user_id]
-                if self.circles[user_id]:
-                    circles = self.circles[user_id]
+                data = ';'.join([' '.join(c) for c in self.circles[user_id] if c])
+                if data:
+                    row += data + '\n'
                 else:
-                    circles = [self.friends[user_id], ]
-                row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
+                    row += ' '.join(friend_id for friend_id in self.friends[user_id].keys()) + '\n'
                 print row
                 fp.write(row)
 
@@ -138,12 +157,12 @@ if __name__ == "__main__":
     #dl.load_friends_data()
 
     # train users
-    users = ['8239', '25159', '2738', '9103', '5881', '16203', '16378', '26321', '27022', '5494', '22650', '3735', '25568', '1968', '16869', '345', '11014', '11364', '1839', '6413', '24758', '25773', '2790', '23299', '26492', '2365', '16642', '23157', '13789', '11186', '8100', '15672', '239', '611', '1357', '8777', '18543', '8553', '13353', '19788', '9846', '12800', '3059', '18005', '22824', '10929', '7667', '9642', '11410', '19129', '2895', '4406', '4829', '9947', '5212', '2255', '24857', '6726', '17951', '10395']
+    #users = ['8239', '25159', '2738', '9103', '5881', '16203', '16378', '26321', '27022', '5494', '22650', '3735', '25568', '1968', '16869', '345', '11014', '11364', '1839', '6413', '24758', '25773', '2790', '23299', '26492', '2365', '16642', '23157', '13789', '11186', '8100', '15672', '239', '611', '1357', '8777', '18543', '8553', '13353', '19788', '9846', '12800', '3059', '18005', '22824', '10929', '7667', '9642', '11410', '19129', '2895', '4406', '4829', '9947', '5212', '2255', '24857', '6726', '17951', '10395']
     # test users
-    #users = ['25708', '2473', '18844', '19268', '25283', '21869', '17748', '5744', '3656', '17002', '26827', '10793', '17497', '23978', '850', '1813', '15515', '20050', '22364', '0', '7983', '11818', '12178', '26019', '3581', '14103', '19608', '14129', '1310', '18612', '1099', '22223', '2630', '20518', '12535', '13471', '6934', '3077', '9199', '3703', '8338', '3236', '2976', '21098', '13687', '15227', '5087', '8890', '24812', '23063']
+    users = ['25708', '2473', '18844', '19268', '25283', '21869', '17748', '5744', '3656', '17002', '26827', '10793', '17497', '23978', '850', '1813', '15515', '20050', '22364', '0', '7983', '11818', '12178', '26019', '3581', '14103', '19608', '14129', '1310', '18612', '1099', '22223', '2630', '20518', '12535', '13471', '6934', '3077', '9199', '3703', '8338', '3236', '2976', '21098', '13687', '15227', '5087', '8890', '24812', '23063']
 
     # circle detection
     cm = CircleMaker(users)
     cm.get_best_friends_circles()
-    cm.get_cluster_circles()
-    cm.write_results('result_train.csv')
+    #cm.get_cluster_circles()
+    cm.write_results('result_features2.csv')
