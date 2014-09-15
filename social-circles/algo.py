@@ -12,156 +12,68 @@ from itertools import izip
 client = MongoClient()
 db = client.soccir
 
-def load_features_data():
-    print 'features loading starts ', datetime.now()
-    features_list = [i[:-1] for i in open('featureList.txt').readlines()]
-    features_vals = set([])
-    with open('features.txt') as fp:
-        for line in fp.xreadlines():
-            line = line.replace('\r', '').replace('\n', '')
-            user_id, features = line.split(' ', 1)
-            for i in features:
-                features_vals.add(i)
-            features = dict([i.rsplit(';', 1) for i in features.split(' ')])
-            features['_id'] = features.pop('id')
-            db.users.insert(features)
-    print 'features inserted into collection ', datetime.now()
-    for k in features_list:
-        db.users.create_index(k)
-    print 'features index created ', datetime.now()
 
-def _get_com_key(user_id, friend_id):
-    if int(user_id) > int(friend_id):
-        return "%s_%s" % (friend_id, user_id)
-    else:
-        return "%s_%s" % (user_id, friend_id)
-
-def load_friends_data():
-    print 'friends loading starts ', datetime.now()
-    egonets_files = [ f for f in listdir('egonets') if isfile(join('egonets/',f)) ]
-    for f in egonets_files:
-        with open('egonets/%s' % f) as fp:
-            user_id = f.split('.')[0]
-            user = db.users.find_one({"_id": user_id})
-            user_friends = []
-            for row in fp:
-                row = row.replace('\n', '')
-                friend_id, com_friends = row.split(': ')
-                com_friends = com_friends.split(' ')
-                user_friends.append(friend_id)
-                k = _get_com_key(user_id, friend_id)
-                try:
-                    db.friends.insert({"_id": k, "friends": com_friends})
-                except:
-                    pass
-            db.users.update({"_id": user_id}, {"$set": {'friends': user_friends}})
-
-def load_circles():
-    ''' loads train circles '''
-    print 'train circles loading starts ', datetime.now()
-    egonets_files = [ f for f in listdir('Training') if isfile(join('Training/',f)) ]
-    for f in egonets_files:
-        with open('Training/%s' % f) as fp:
-            user_id = f.split('.')[0]
-            user = db.users.find_one({"_id": user_id})
-
-def load_common_friends():
-    ''' loading data from egonets/ '''
-
-
-def _get_circle_on_features(user_features, friends_features, features_list, common_cnt=2):
-    circle = []
-    for ff in friends_features:
-        com_features = { k:v for k, v in user_features.iteritems() 
-                if ( (k in ff) and (user_features[k] == ff[k]) and [True for f in features_list if f in k] ) }
-        if len(com_features) > common_cnt:
-            circle.append(ff['_id'])
-    return circle
-
-def common_features_egonet():
-    with open('testSet_users_friend.csv') as fp, open('result5.csv', 'w') as fpw:
-        fpw.write("UserId,Predicted\n")
-        for line in fp.xreadlines():
-            line = line.replace('\r', '').replace('\n', '')
-            user_id, friends = line.split(': ', 1)
-            friends = friends.split(' ')
-            user_features = db.users.find_one({"_id": user_id})
-            friends_features = list(db.users.find({"_id": {"$in": friends}}))
-            circles = []
-            print 'USER_ID::::', user_id
-            # getting best friends - most common features
-            better_friends = Counter()
-            for ff in friends_features:
-                com_features = { k:v for k, v in user_features.iteritems() if ((k in ff)and(user_features[k] == ff[k])) }
-                better_friends[ff['_id']] = len(com_features)
-            best_cnt = len(friends_features) / 100 or 3
-            best_friends = [i[0] for i in better_friends.most_common(best_cnt)]
-            #print 'best friends:', best_friends
-            circles.append(best_friends)
-
-            # collegues
-            collegues = _get_circle_on_features(user_features, friends_features, ['work', ], 2)
-            circles.append(collegues)
-            print 'collegues', collegues
-            #[friends_features.remove(i) for i in friends_features if i['_id'] in collegues]
-
-            # school mates
-            school_mates = _get_circle_on_features(user_features, friends_features, ['education', ], 4)
-            circles.append(school_mates)
-            print 'school_mates', school_mates
-            #[friends_features.remove(i) for i in friends_features if i['_id'] in school_mates]
-
-            # local_mates
-            local_mates = _get_circle_on_features(user_features, friends_features, ['loca', ], 3)
-            circles.append(local_mates)
-            print 'local_mates', local_mates
-            [friends_features.remove(i) for i in friends_features if i['_id'] in local_mates]
-
-            # home_mates
-            home_mates = _get_circle_on_features(user_features, friends_features, ['hometown', ], 2)
-            circles.append(home_mates)
-            print 'home_mates', home_mates
-            [friends_features.remove(i) for i in friends_features if i['_id'] in home_mates]
-
-            # other_mates
-            [friends_features.remove(i) for i in friends_features if i['_id'] in collegues]
-            [friends_features.remove(i) for i in friends_features if i['_id'] in school_mates]
-            other_mates = _get_circle_on_features(user_features, friends_features, ['', ], 7)
-            circles.append(other_mates)
-            print 'other_mates', other_mates
-            [friends_features.remove(i) for i in friends_features if i['_id'] in other_mates]
-            
-            row = "%s," % user_id
-            row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
-            print row
-            fpw.write(row)
-
-def get_cluster_circles():
-    with open('egonets/850.egonet') as fp:
-        data = {}
-        for row in fp:
-            row = row.replace('\n', '')
-            user_id, comm = row.split(': ')
-            comm = set(comm.split(' '))
-            data[user_id] = comm
-        clu = cluster.WardAgglomeration(n_clusters=5)
-        clu.fit(np.array(arrs.values()), np.array(arrs.keys()))
-        clu.labels_
-
-#===============================================================================
-
-class CircleMaker:
-    def __init__(self, fname):
-        # circles_list - 'user_id': [['123', '124'], [...], [...]]
-        self.circles_list = defaultdict(list)
-        # default_circles - 'user_id': ['123', '124', ...]
-        self.default_circles = defaultdict(list)
-        with open(fname) as fp:
-            fp.readline()
+class DataLoader:
+    def load_features_data(self):
+        print 'features loading starts ', datetime.now()
+        features_list = [i[:-1] for i in open('featureList.txt').readlines()]
+        features_vals = set([])
+        with open('features.txt') as fp:
             for line in fp.xreadlines():
                 line = line.replace('\r', '').replace('\n', '')
-                user_id, friends = line.split(',', 1)
-                self.default_circles[user_id] = friends.split(' ')
+                user_id, features = line.split(' ', 1)
+                for i in features:
+                    features_vals.add(i)
+                features = dict([i.rsplit(';', 1) for i in features.split(' ')])
+                features['_id'] = features.pop('id')
+                db.users.insert(features)
+        print 'features inserted into collection ', datetime.now()
+        for k in features_list:
+            db.users.create_index(k)
+        print 'features index created ', datetime.now()
+
+    def _get_com_key(self, user_id, friend_id):
+        if int(user_id) > int(friend_id):
+            return "%s_%s" % (friend_id, user_id)
+        else:
+            return "%s_%s" % (user_id, friend_id)
+
+    def load_friends_data(self):
+        print 'friends loading starts ', datetime.now()
+        egonets_files = [ f for f in listdir('egonets') if isfile(join('egonets/',f)) ]
+        for f in egonets_files:
+            with open('egonets/%s' % f) as fp:
+                user_id = f.split('.')[0]
+                user = db.users.find_one({"_id": user_id})
+                user_friends = []
+                for row in fp:
+                    row = row.replace('\n', '')
+                    friend_id, com_friends = row.split(': ')
+                    com_friends = com_friends.split(' ')
+                    user_friends.append(friend_id)
+                    k = self._get_com_key(user_id, friend_id)
+                    try:
+                        db.friends.insert({"_id": k, "friends": com_friends})
+                    except:
+                        pass
+                db.users.update({"_id": user_id}, {"$set": {'friends': user_friends}})
+
+    def load_circles():
+        ''' loads train circles '''
+        print 'train circles loading starts ', datetime.now()
+        egonets_files = [ f for f in listdir('Training') if isfile(join('Training/',f)) ]
+        for f in egonets_files:
+            with open('Training/%s' % f) as fp:
+                user_id = f.split('.')[0]
+                user = db.users.find_one({"_id": user_id})
+
+
+class CircleMaker:
+    def __init__(self, users):
+        self.circles = defaultdict(list)
+        self.friends = defaultdict(list)
+        self.users = users
+
 
     def get_best_friends_circles(self):
         pass
@@ -169,7 +81,7 @@ class CircleMaker:
     def get_cluster_circles(self):
         ''' get data of common friends from egonet and append to self.circles_list'''
         all_features = open('featureList.txt').read().split('\n')[:-1]
-        for user_id in self.default_circles:
+        for user_id in self.users:
             # loading data of egonet
             user_features = db.users.find_one({"_id": user_id})
             with open('egonets/%s.egonet' % user_id) as fp:
@@ -178,6 +90,7 @@ class CircleMaker:
                     line = line.replace('\r', '').replace('\n', '')
                     friend_id, common_friends = line.split(': ', 1)
                     common_list[friend_id] = common_friends.split(' ')
+                    self.friends[user_id].append(friend_id)
             # preparing for clustring
             for friend_id in common_list:
                 friend_features = db.users.find_one({"_id": friend_id})
@@ -199,32 +112,38 @@ class CircleMaker:
                 circles[v].append(k)
             for circle in circles.values():
                 if len(circle) > 2 and len(circle) < min(len(common_list) / 4, 8):
-                    self.circles_list[user_id].append(circle)
+                    self.circles[user_id].append(circle)
 
-    def write_results(self):
-        with open('result7.csv', 'w') as fp:
+    def write_results(self, fname):
+        with open(fname, 'w') as fp:
             fp.write("UserId,Predicted\n")
-            for user_id in self.default_circles.keys():
+            for user_id in self.users:
                 row = "%s," % user_id
-                print user_id, self.circles_list[user_id]
-                if self.circles_list[user_id]:
-                    circles = self.circles_list[user_id]
+                print user_id, self.circles[user_id]
+                if self.circles[user_id]:
+                    circles = self.circles[user_id]
                 else:
-                    circles = [self.default_circles[user_id], ]
+                    circles = [self.friends[user_id], ]
                 row += ';'.join([' '.join(c) for c in circles if c]) + '\n'
                 print row
                 fp.write(row)
 
 
 if __name__ == "__main__":
+    # ETL
+    dl = DataLoader()
     #db.drop_collection('users')
     #db.drop_collection('friends')
-    #load_features_data()
-    #load_friends_data()
-    #common_features_egonet()
-    #TODO leave best friends, other circlies get from clustering common nbrs
+    #dl.load_features_data()
+    #dl.load_friends_data()
 
-    cm = CircleMaker('sample_submission.csv')
+    # train users
+    users = ['8239', '25159', '2738', '9103', '5881', '16203', '16378', '26321', '27022', '5494', '22650', '3735', '25568', '1968', '16869', '345', '11014', '11364', '1839', '6413', '24758', '25773', '2790', '23299', '26492', '2365', '16642', '23157', '13789', '11186', '8100', '15672', '239', '611', '1357', '8777', '18543', '8553', '13353', '19788', '9846', '12800', '3059', '18005', '22824', '10929', '7667', '9642', '11410', '19129', '2895', '4406', '4829', '9947', '5212', '2255', '24857', '6726', '17951', '10395']
+    # test users
+    #users = ['25708', '2473', '18844', '19268', '25283', '21869', '17748', '5744', '3656', '17002', '26827', '10793', '17497', '23978', '850', '1813', '15515', '20050', '22364', '0', '7983', '11818', '12178', '26019', '3581', '14103', '19608', '14129', '1310', '18612', '1099', '22223', '2630', '20518', '12535', '13471', '6934', '3077', '9199', '3703', '8338', '3236', '2976', '21098', '13687', '15227', '5087', '8890', '24812', '23063']
+
+    # circle detection
+    cm = CircleMaker(users)
     cm.get_best_friends_circles()
     cm.get_cluster_circles()
-    cm.write_results()
+    cm.write_results('result_train.csv')
