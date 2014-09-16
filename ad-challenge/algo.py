@@ -24,16 +24,21 @@ class Algo:
         clf = AdaBoostClassifier(base_estimator=RandomForestClassifier(n_estimators=30), n_estimators=10)
         with open(ftrain, 'r') as ftrain_obj:
             cntr = 1
+            train_set_x = []
+            train_set_y = []
             ftrain_obj.readline()
             for t in ftrain_obj.xreadlines():
-                row = t[:-1].split(',')
+                row = t[:-2].split(',')
                 ad_id = row.pop(0)
-                y_train = np.array([row.pop(-1), ])
-                X_train = np.array([[r for r in row if re.match('^[0-9\.]+$', r)], ])
-                clf.fit(X_train, y_train)
+                train_set_y.append(float(row.pop(0)))
+                res = np.array([float(r) if r else 0 for r in row[:13]])
+                train_set_x.append(res)
                 cntr += 1
                 if cntr == 10000:
                     break
+            train_set_y = np.array(train_set_y)
+            train_set_x = np.array(train_set_x)
+            clf.fit(train_set_x, train_set_y)
         return clf
 
     def compute_result(self, clf, ftest, fresult):
@@ -41,12 +46,16 @@ class Algo:
             ftest_obj.readline()
             with open(fresult, 'w') as fres_obj:
                 fres_obj.write('Id,Predicted\n')
+                cntr = 0
                 for t in ftest_obj.xreadlines():
                     row = t[:-1].split(',')
                     ad_id = row.pop(0)
-                    X_test = np.array([[r for r in row if re.match('^[0-9\.]+$', r)], ])
+                    X_test = np.array([float(r) if r else 0 for r in row[:13]])
                     pred = np.array(clf.predict_proba(X_test))[0]
-                    fres_obj.write('%s,%s\n' % (ad_id, pred) )
+                    fres_obj.write('%s,%s\n' % (ad_id, pred[1]) )
+                    cntr += 1
+                    if cntr % 10000 == 0:
+                        print cntr, datetime.now()
 
 
 if __name__ == "__main__":
